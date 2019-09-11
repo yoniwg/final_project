@@ -1,6 +1,8 @@
+import numpy
 
-class TerminalsHandler:
-    def __init__(self, rules_list, delimiters_list, num_from_begin, num_from_end):
+
+class TerminalsFeatureBuilder:
+    def __init__(self, rules_list, delimiters_list, num_from_begin = 20, num_from_end = 20):
         self.rulesDict = {}
 
         for x in range(num_from_begin):
@@ -34,50 +36,29 @@ class TerminalsHandler:
         if place_from_end <= self.mNumFromEnd:
             dic[str(place_from_end) + "_FromEnd"] = 1
 
-        return dic.values()
+        return numpy.array(dic.values())
 
     def create_features_list_for_node(self, terminals_list, node_index):
         uncle = None
         uncle2 = None
         if node_index > 0:
-            rule, terminal = terminals_list[node_index - 1]
+            terminal, rule = terminals_list[node_index - 1]
             uncle = rule
 
         if node_index > 1:
-            rule, terminal = terminals_list[node_index - 2]
+            terminal, rule = terminals_list[node_index - 2]
             uncle2 = rule
 
         pre_delimiter, post_delimiter = self.find_delimiters_place_around_inex(node_index, terminals_list)
 
         return self.create_features_list(uncle, uncle2, node_index - pre_delimiter, post_delimiter - node_index)
 
-    def create_terminals_list_for_tree(self, root):
-
-        if root.tag != "TOP":
-            print("ERROR: This isn't root")
-            return None
-
-        node = root.children[0]
-        terminals_list = list()
-        self.get_terminals(node, terminals_list)
-
-        return terminals_list
-
-    def get_terminals(self, node, terminals_list):
-        if len(node.children) == 0:
-            terminals_list.append((node.parent.tag, node.tag))
-            return
-        self.get_terminals(node.children[0], terminals_list)
-
-        if len(node.children) == 2:
-            self.get_terminals(node.children[1], terminals_list)
-
     def find_delimiters_place_around_inex(self, index, terminals_list):
         before_index = -1
         after_index = len(terminals_list)
 
         for idx, val in enumerate(terminals_list):
-            rule, terminal = val
+            terminal, rule = val
             if (idx < index) and self.is_delimiter(terminal):
                 before_index = idx
             if (idx > index) and self.is_delimiter(terminal):
@@ -94,7 +75,7 @@ class TerminalsHandler:
         return False
 
 
-class RulesHandler:
+class RulesFeatureBuilder:
     def __init__(self, rules_list, max_deep_from_end):
         self.rulesDict = {}
 
