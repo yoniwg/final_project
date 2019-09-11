@@ -1,6 +1,8 @@
 import os
 
 import nltk
+nltk.download('treebank')
+nltk.download('tagsets')
 from sklearn.linear_model import LogisticRegression
 
 from features_builders import TerminalsFeatureBuilder
