@@ -1,6 +1,13 @@
 import os
 
 import nltk
+from scipy import sparse
+from scipy.sparse import csr_matrix
+from sklearn.feature_extraction import DictVectorizer
+
+from util.inc_csr_matrix import IncrementalCSRMatrix
+from vectorizer import TerminalVectorizer
+
 nltk.download('treebank')
 nltk.download('tagsets')
 from sklearn.linear_model import LogisticRegression
@@ -11,33 +18,19 @@ from util.transliteration import heb_tags, _trans_symbols
 
 
 class Driver:
-    _training_treebank_file = os.getcwd() + '/data/heb-ctrees.train'
+    _training_treebank_file = os.getcwd() + '/data/heb-ctrees_min.train'
     _gold_treebank_file = os.getcwd() + '/data/heb-ctrees.gold'
-    _terminal_trainer = LogisticRegression(solver='sag', multi_class='multinomial')
-    _eng_tag_set = list(nltk.data.load('help/tagsets/upenn_tagset.pickle').keys())
-    _heb_tag_set = heb_tags
-    _terminal_feature_builder = TerminalsFeatureBuilder(heb_tags, _trans_symbols)
-    _terminal_feature_matrix = (list(), list())
 
-    def _read_train_file(self):
-        self._training_treebank = get_treebank(self._training_treebank_file)
+    _terminal_vectorizer = TerminalVectorizer(get_treebank(_training_treebank_file))
+    _terminal_trainer = LogisticRegression(solver='lbfgs', multi_class='multinomial', max_iter=200)
 
-    def _train(self):
-        for tree in self._training_treebank:
-            self._train_terminals(tree.pos())
-            self._train_non_terminals(tree)
+    def drive(self):
+        self._train_terminals()
 
-    def _train_terminals(self, terminal_nodes):
-        for idx in range(len(terminal_nodes)):
-            vec_features = self._terminal_feature_builder.create_features_list_for_node(terminal_nodes, idx)
-            self._terminal_feature_matrix[0].append(vec_features)
-            self._terminal_feature_matrix[1].append(terminal_nodes[idx][1])
-
-    def _train_non_terminals(self, tree):
-        pass
-
-
-driver = Driver()
-driver._read_train_file()
-driver._train()
-pass
+    def _train_terminals(self):
+        X, y = self._terminal_vectorizer.build_X_y(True)
+        print("start training")
+        self._terminal_trainer.fit(X, y)
+        X, y = self._terminal_vectorizer.build_X_y(False)
+        print("start test for terminals")
+        print(self._terminal_trainer.score(X,y))

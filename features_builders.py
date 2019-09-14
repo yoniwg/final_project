@@ -1,8 +1,11 @@
 import numpy
 
+START_LABEL = '<S>'
+END_LABEL = '<E>'
+
 
 class TerminalsFeatureBuilder:
-    def __init__(self, rules_list, delimiters_list, num_from_begin = 20, num_from_end = 20):
+    def __init__(self, rules_list, delimiters_list, num_from_begin=20, num_from_end=20):
         self.rulesDict = {}
 
         for x in range(num_from_begin):
@@ -21,6 +24,61 @@ class TerminalsFeatureBuilder:
         self.mNumFromEnd = num_from_end
         self.mDelimitersList = delimiters_list
 
+    def get_feature_num(self):
+        return len(self.rulesDict)
+
+    def flat_word_features(self, sentence, w_idx):
+        cur_word = sentence[w_idx]
+        if w_idx > 0:
+            prev_word = sentence[w_idx - 1]
+        else:
+            prev_word = START_LABEL
+        if w_idx < len(sentence) - 1:
+            next_word = sentence[w_idx + 1]
+        else:
+            next_word = END_LABEL
+        return {
+            # 'word': cur_word,
+            'index': w_idx,
+            'is_first': w_idx == 0,
+            'is_last': w_idx == len(sentence) - 1,
+            # 'prev_word': prev_word,
+            # 'next_word': next_word,
+            'curr_is_lower': cur_word.islower(),
+            'prev_is_lower': prev_word.islower(),
+            'next_is_lower': next_word.islower(),
+            'curr_is_upper': cur_word.isupper(),
+            'prev_is_upper': prev_word.isupper(),
+            'next_is_upper': next_word.isupper(),
+            'first_upper': cur_word[0].isupper(),
+            'prev_first_upper': prev_word[0].isupper(),
+            'next_first_upper': next_word[0].isupper(),
+            'is_digit': cur_word.isdigit(),
+            'prev_is_digit': prev_word.isdigit(),
+            'next_is_digit': next_word.isdigit(),
+            'has_no_sign': cur_word.isalnum(),
+            'prev_is_sign': all(map(lambda c: not c.isalnum(), prev_word)),
+            'next_is_sign': all(map(lambda c: not c.isalnum(), next_word)),
+            'prefix-1': cur_word[0],
+            'prefix-2': cur_word[:2],
+            'prefix-3': cur_word[:3],
+            'suffix-1': cur_word[-1],
+            'suffix-2': cur_word[-2:],
+            'suffix-3': cur_word[-3:],
+            'prev_prefix-1': prev_word[0],
+            'prev_prefix-2': prev_word[:2],
+            'prev_prefix-3': prev_word[:3],
+            'prev_suffix-1': prev_word[-1],
+            'prev_suffix-2': prev_word[-2:],
+            'prev_suffix-3': prev_word[-3:],
+            'next_prefix-1': next_word[0],
+            'next_prefix-2': next_word[:2],
+            'next_prefix-3': next_word[:3],
+            'next_suffix-1': next_word[-1],
+            'next_suffix-2': next_word[-2:],
+            'next_suffix-3': next_word[-3:],
+        }
+
     def create_features_list(self, uncle, uncle2, place_from_begin, place_from_end):
         dic = self.rulesDict.copy()
 
@@ -36,7 +94,7 @@ class TerminalsFeatureBuilder:
         if place_from_end <= self.mNumFromEnd:
             dic[str(place_from_end) + "_FromEnd"] = 1
 
-        return numpy.array(dic.values())
+        return dic
 
     def create_features_list_for_node(self, terminals_list, node_index):
         uncle = None
@@ -51,7 +109,10 @@ class TerminalsFeatureBuilder:
 
         pre_delimiter, post_delimiter = self.find_delimiters_place_around_inex(node_index, terminals_list)
 
-        return self.create_features_list(uncle, uncle2, node_index - pre_delimiter, post_delimiter - node_index)
+        merged = self.create_features_list(uncle, uncle2, node_index - pre_delimiter, post_delimiter - node_index)
+        merged.update(self.flat_word_features(list(map(lambda tup: tup[1], terminals_list)), node_index))
+
+        return merged
 
     def find_delimiters_place_around_inex(self, index, terminals_list):
         before_index = -1
