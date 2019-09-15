@@ -77,4 +77,4 @@ class RulesVectorizer:
 
     def build_one_vector(self, l_node, r_node):
         return self._rules_feature_vectorizer.transform(
-            self._rules_feature_builder.create_features_list_for_nodes(l_node,r_node))
+            self._rules_feature_builder.create_features_list_for_nodes(l_node, r_node))

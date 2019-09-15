@@ -6,15 +6,15 @@ END_LABEL = '<E>'
 
 class TerminalsFeatureBuilder:
     def __init__(self, rules_list, delimiters_list, num_from_begin=20, num_from_end=20):
-        self.rulesDict = {}
+        self._rules_dict = {}
         for x in range(num_from_begin):
-            self.rulesDict[str(x + 1) + "_FromBegin"] = 0
+            self._rules_dict[str(x + 1) + "_FromBegin"] = 0
         for x in range(num_from_end):
-            self.rulesDict[str(x + 1) + "_FromEnd"] = 0
+            self._rules_dict[str(x + 1) + "_FromEnd"] = 0
         for i, val in enumerate(rules_list):
-            self.rulesDict["Uncle_" + val] = 0
+            self._rules_dict["Uncle_" + val] = 0
         for i, val in enumerate(rules_list):
-            self.rulesDict["Uncle2_" + val] = 0
+            self._rules_dict["Uncle2_" + val] = 0
 
         self._max_begin = num_from_begin
         self._max_end = num_from_end
@@ -34,7 +34,7 @@ class TerminalsFeatureBuilder:
 
         pre_delimiter, post_delimiter = self._find_delimiters_place_around_index(node_index, terminals_list)
 
-        merged_dict = self.rulesDict.copy()
+        merged_dict = self._rules_dict.copy()
         self._create_uncles_features(merged_dict, uncle, uncle2)
         self._create_position_features(merged_dict, node_index - pre_delimiter, post_delimiter - node_index)
         merged_dict.update(self._flat_word_features(list(map(lambda tup: tup[1], terminals_list)), node_index))
@@ -45,7 +45,7 @@ class TerminalsFeatureBuilder:
 
         pre_delimiter, post_delimiter = self._find_delimiters_place_around_index(node_index, sentence)
 
-        merged_dict = self.rulesDict.copy()
+        merged_dict = self._rules_dict.copy()
         self._create_uncles_features(merged_dict, uncle_probs, uncle2_probs)
         self._create_position_features(merged_dict, node_index - pre_delimiter, post_delimiter - node_index)
         merged_dict.update(self._flat_word_features(sentence, node_index))
@@ -160,8 +160,8 @@ class RulesFeatureBuilder:
             right_left_rule = right_node[0].label()
             right_right_rule = right_node[1].label()
 
-        left_height = left_node.height()
-        right_height = right_node.height()
+        left_height = len(left_node.leaves())
+        right_height = len(right_node.leaves())
 
         return {
             'left-rule': left_rule,

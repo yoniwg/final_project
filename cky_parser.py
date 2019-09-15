@@ -1,4 +1,6 @@
 import operator
+from collections import defaultdict
+from itertools import product
 from typing import Type
 
 from nltk.tree import Tree
@@ -81,7 +83,10 @@ class CKY_Parser:
 
                     for firstRule, (firstProb, _, _, _) in firstNodeToCheck.items():
                         for secondRule, (secondProb, _, _, _) in secondNodeToCheck.items():
-                            rules_res = self._rules_trainer.predict_proba(self._rules_vecorizer.build_one_vector())
+                            rules_res = self._rules_trainer.predict_proba(
+                                self._rules_vecorizer.build_one_vector(
+                                    firstRule, secondRule,
+                                ))
                             if rules_deriver is not None:
                                 leavesProb = firstProb + secondProb
                                 for source_rule, prob in rules_deriver.items():
@@ -100,3 +105,33 @@ class CKY_Parser:
         new_prob = prob + leaves_prob
         if source_rule not in node or new_prob > node[source_rule][0]:
             node[source_rule] = (new_prob, tuple(), l_child, r_child)
+
+    def parse2(self, sentence):
+        table = [[defaultdict(float) for _ in sentence] for _ in sentence]
+        nodes_table = [[defaultdict(lambda: Tree('')) for _ in sentence] for _ in sentence]
+        prev_probs = [0] * len(self._tags_set)
+        prev2_probs = [0] * len(self._tags_set)
+        for j in range(0, len(sentence)):
+            terminal_vec = self._terminal_vecorizer.build_one_vector(sentence, j, prev_probs, prev2_probs)
+            terminal_res = self._terminal_trainer.predict_proba(terminal_vec)
+            prev2_probs = prev_probs
+            prev_probs = terminal_res
+            for idx, prob in enumerate(terminal_res):
+                table[j][j][self._tags_set[idx]] = prob
+                nodes_table[j - 1][j][sentence[j]] = Tree(sentence[j])
+            for i in reversed(range(j)):
+                for k in range(i, j):
+                    for pair in set(product(table[i][k], table[k + 1][j])):
+                        rules_probs = self._rules_trainer.predict_proba(self._rules_vecorizer.build_one_vector(
+                                nodes_table[i][k][pair[0]], nodes_table[k + 1][j][pair[1]]))
+                        for idx, prob in enumerate(rules_probs):
+                            l_rule = self._tags_set[idx]
+                            new_prob = prob * table[i][k][pair[0]] * table[k + 1][j][pair[1]]
+                            if table[i][j][l_rule] < new_prob:
+                                table[i][j][l_rule] = new_prob
+                                node = Tree(l_rule.label())
+                                node.append(nodes_table[i][k][pair[0] if isinstance(pair[0], str) else pair[0].label()])
+                                node.append(nodes_table[i][k][pair[1] if isinstance(pair[1], str) else pair[1].label()])
+                                nodes_table[i][j][l_rule.label()] = node
+
+        return nodes_table[0][len(sentence) - 1]['TOP']
