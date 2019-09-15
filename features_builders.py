@@ -7,27 +7,92 @@ END_LABEL = '<E>'
 class TerminalsFeatureBuilder:
     def __init__(self, rules_list, delimiters_list, num_from_begin=20, num_from_end=20):
         self.rulesDict = {}
-
         for x in range(num_from_begin):
             self.rulesDict[str(x + 1) + "_FromBegin"] = 0
-
         for x in range(num_from_end):
             self.rulesDict[str(x + 1) + "_FromEnd"] = 0
-
         for i, val in enumerate(rules_list):
             self.rulesDict["Uncle_" + val] = 0
-
         for i, val in enumerate(rules_list):
             self.rulesDict["Uncle2_" + val] = 0
 
-        self.mNumFromBegin = num_from_begin
-        self.mNumFromEnd = num_from_end
-        self.mDelimitersList = delimiters_list
+        self._max_begin = num_from_begin
+        self._max_end = num_from_end
+        self.rules_list = rules_list
+        self._delims_set = set(delimiters_list)
 
-    def get_feature_num(self):
-        return len(self.rulesDict)
+    def create_features_list_for_node(self, terminals_list, node_index):
+        uncle = None
+        uncle2 = None
+        if node_index > 0:
+            terminal, rule = terminals_list[node_index - 1]
+            uncle = rule
 
-    def flat_word_features(self, sentence, w_idx):
+        if node_index > 1:
+            terminal, rule = terminals_list[node_index - 2]
+            uncle2 = rule
+
+        pre_delimiter, post_delimiter = self._find_delimiters_place_around_index(node_index, terminals_list)
+
+        merged_dict = self.rulesDict.copy()
+        self._create_uncles_features(merged_dict, uncle, uncle2)
+        self._create_position_features(merged_dict, node_index - pre_delimiter, post_delimiter - node_index)
+        merged_dict.update(self._flat_word_features(list(map(lambda tup: tup[1], terminals_list)), node_index))
+
+        return merged_dict
+
+    def create_features_list_for_terminal(self, sentence, node_index, uncle_probs, uncle2_probs):
+
+        pre_delimiter, post_delimiter = self._find_delimiters_place_around_index(node_index, sentence)
+
+        merged_dict = self.rulesDict.copy()
+        self._create_uncles_features(merged_dict, uncle_probs, uncle2_probs)
+        self._create_position_features(merged_dict, node_index - pre_delimiter, post_delimiter - node_index)
+        merged_dict.update(self._flat_word_features(sentence, node_index))
+
+        return merged_dict
+
+    def _create_uncles_features(self, dic, uncle, uncle2):
+        if uncle is not None:
+            dic["Uncle_" + uncle] = 1
+
+        if uncle2 is not None:
+            dic["Uncle2_" + uncle2] = 1
+
+    def _create_uncles_probs_features(self, dic, uncle_probs, uncle2_probs):
+        for idx, rule in enumerate(self.rules_list):
+            dic["Uncle_" + rule] = uncle_probs[idx]
+            dic["Uncle2_" + rule] = uncle2_probs[idx]
+
+    def _create_position_features(self, dic, place_from_begin, place_from_end):
+
+        if place_from_begin <= self._max_begin:
+            dic[str(place_from_begin) + "_FromBegin"] = 1
+
+        if place_from_end <= self._max_end:
+            dic[str(place_from_end) + "_FromEnd"] = 1
+
+    def _find_delimiters_place_around_index(self, index, terminals_list):
+        before_index = -1
+        after_index = len(terminals_list)
+
+        for idx, val in enumerate(terminals_list):
+            if isinstance(val, tuple):
+                terminal, _ = val
+            else:
+                terminal = val
+            if (idx < index) and self._is_delimiter(terminal):
+                before_index = idx
+            if (idx > index) and self._is_delimiter(terminal):
+                after_index = idx
+                return before_index, after_index
+
+        return before_index, after_index
+
+    def _is_delimiter(self, terminal):
+        return terminal in self._delims_set
+
+    def _flat_word_features(self, sentence, w_idx):
         cur_word = sentence[w_idx]
         if w_idx > 0:
             prev_word = sentence[w_idx - 1]
@@ -38,12 +103,9 @@ class TerminalsFeatureBuilder:
         else:
             next_word = END_LABEL
         return {
-            # 'word': cur_word,
             'index': w_idx,
             'is_first': w_idx == 0,
             'is_last': w_idx == len(sentence) - 1,
-            # 'prev_word': prev_word,
-            # 'next_word': next_word,
             'curr_is_lower': cur_word.islower(),
             'prev_is_lower': prev_word.islower(),
             'next_is_lower': next_word.islower(),
@@ -79,145 +141,36 @@ class TerminalsFeatureBuilder:
             'next_suffix-3': next_word[-3:],
         }
 
-    def create_features_list(self, uncle, uncle2, place_from_begin, place_from_end):
-        dic = self.rulesDict.copy()
-
-        if uncle is not None:
-            dic["Uncle_" + uncle] = 1
-
-        if uncle2 is not None:
-            dic["Uncle2_" + uncle2] = 1
-
-        if place_from_begin <= self.mNumFromBegin:
-            dic[str(place_from_begin) + "_FromBegin"] = 1
-
-        if place_from_end <= self.mNumFromEnd:
-            dic[str(place_from_end) + "_FromEnd"] = 1
-
-        return dic
-
-    def create_features_list_for_node(self, terminals_list, node_index):
-        uncle = None
-        uncle2 = None
-        if node_index > 0:
-            terminal, rule = terminals_list[node_index - 1]
-            uncle = rule
-
-        if node_index > 1:
-            terminal, rule = terminals_list[node_index - 2]
-            uncle2 = rule
-
-        pre_delimiter, post_delimiter = self.find_delimiters_place_around_inex(node_index, terminals_list)
-
-        merged = self.create_features_list(uncle, uncle2, node_index - pre_delimiter, post_delimiter - node_index)
-        merged.update(self.flat_word_features(list(map(lambda tup: tup[1], terminals_list)), node_index))
-
-        return merged
-
-    def find_delimiters_place_around_inex(self, index, terminals_list):
-        before_index = -1
-        after_index = len(terminals_list)
-
-        for idx, val in enumerate(terminals_list):
-            terminal, rule = val
-            if (idx < index) and self.is_delimiter(terminal):
-                before_index = idx
-            if (idx > index) and self.is_delimiter(terminal):
-                after_index = idx
-                return before_index, after_index
-
-        return before_index, after_index
-
-    def is_delimiter(self, terminal):
-        for word in self.mDelimitersList:
-            if terminal == word:
-                return True
-
-        return False
-
 
 class RulesFeatureBuilder:
-    def __init__(self, rules_list, max_deep_from_end):
-        self.rulesDict = {}
-
-        for x in range(max_deep_from_end):
-            self.rulesDict[str(x + 1) + "_FromLeftEnd"] = 0
-
-        for x in range(max_deep_from_end):
-            self.rulesDict[str(x + 1) + "_FromRightEnd"] = 0
-
-        for i, val in enumerate(rules_list):
-            self.rulesDict["Left_" + val] = 0
-
-        for i, val in enumerate(rules_list):
-            self.rulesDict["Right_" + val] = 0
-
-        for i, val in enumerate(rules_list):
-            self.rulesDict["Left_Left_" + val] = 0
-
-        for i, val in enumerate(rules_list):
-            self.rulesDict["Left_Right_" + val] = 0
-
-        for i, val in enumerate(rules_list):
-            self.rulesDict["Right_Left_" + val] = 0
-
-        for i, val in enumerate(rules_list):
-            self.rulesDict["Right_Right_" + val] = 0
-
-        self.mMaxDeepFromEnd = max_deep_from_end
-
-    def create_features_list(self, left_rule, right_rule, left_left_rule, left_right_rule, right_left_rule,
-                             right_right_rule, left_deep_from_end, right_deep_from_end):
-        dic = self.rulesDict.copy()
-
-        if left_rule is not None:
-            dic["Left_" + left_rule] = 1
-
-        if right_rule is not None:
-            dic["Right_" + right_rule] = 1
-
-        if left_left_rule is not None:
-            dic["Left_Left_" + left_left_rule] = 1
-
-        if left_right_rule is not None:
-            dic["Left_Right_" + left_right_rule] = 1
-
-        if right_left_rule is not None:
-            dic["Right_Left_" + right_left_rule] = 1
-
-        if right_right_rule is not None:
-            dic["Right_Right_" + right_right_rule] = 1
-
-        if left_deep_from_end <= self.mMaxDeepFromEnd:
-            dic[str(left_deep_from_end) + "_FromLeftEnd"] = 1
-
-        if right_deep_from_end <= self.mMaxDeepFromEnd:
-            dic[str(right_deep_from_end) + "_FromRightEnd"] = 1
-
-        return dic.values()
 
     def create_features_list_for_nodes(self, left_node, right_node):
-        left_rule = left_node.tag
-        right_rule = right_node.tag
+        left_rule = left_node.label()
+        right_rule = right_node.label()
 
-        left_left_rule = None
-        left_right_rule = None
-        if len(left_node.children) == 2:
-            left_left_rule = left_node.children[0].tag
-            left_right_rule = left_node.children[1].tag
+        left_left_rule = ''
+        left_right_rule = ''
+        if len(left_node) == 2:
+            left_left_rule = left_node[0].label()
+            left_right_rule = left_node[1].label()
 
-        right_left_rule = None
-        right_right_rule = None
-        if len(right_node.children) == 2:
-            right_left_rule = right_node.children[0].tag
-            right_right_rule = right_node.children[1].tag
+        right_left_rule = ''
+        right_right_rule = ''
+        if len(right_node) == 2:
+            right_left_rule = right_node[0].label()
+            right_right_rule = right_node[1].label()
 
-        left_deep_from_end = self.get_deep(left_node)
-        right_deep_from_end = self.get_deep(right_node)
+        left_height = left_node.height()
+        right_height = right_node.height()
 
-        return self.create_features_list(left_rule, right_rule, left_left_rule, left_right_rule, right_left_rule,
-                                         right_right_rule, left_deep_from_end, right_deep_from_end)
+        return {
+            'left-rule': left_rule,
+            'right-rule': right_rule,
+            'left_left_rule': left_left_rule,
+            'left_right_rule': left_right_rule,
+            'right_left_rule': right_left_rule,
+            'right_right_rule':right_right_rule,
+            'left_height': left_height,
+            'right_height': right_height
+        }
 
-    def get_deep(self, node):
-        return 3
-        # TODO YONI
