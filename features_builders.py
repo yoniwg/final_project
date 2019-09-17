@@ -37,7 +37,7 @@ class TerminalsFeatureBuilder:
         merged_dict = self._rules_dict.copy()
         self._create_uncles_features(merged_dict, uncle, uncle2)
         self._create_position_features(merged_dict, node_index - pre_delimiter, post_delimiter - node_index)
-        merged_dict.update(self._flat_word_features(list(map(lambda tup: tup[1], terminals_list)), node_index))
+        merged_dict.update(self._flat_word_features(list(map(lambda tup: tup[0], terminals_list)), node_index))
 
         return merged_dict
 
@@ -46,7 +46,7 @@ class TerminalsFeatureBuilder:
         pre_delimiter, post_delimiter = self._find_delimiters_place_around_index(node_index, sentence)
 
         merged_dict = self._rules_dict.copy()
-        self._create_uncles_features(merged_dict, uncle_probs, uncle2_probs)
+        self._create_uncles_probs_features(merged_dict, uncle_probs, uncle2_probs)
         self._create_position_features(merged_dict, node_index - pre_delimiter, post_delimiter - node_index)
         merged_dict.update(self._flat_word_features(sentence, node_index))
 
@@ -106,21 +106,12 @@ class TerminalsFeatureBuilder:
             'index': w_idx,
             'is_first': w_idx == 0,
             'is_last': w_idx == len(sentence) - 1,
-            'curr_is_lower': cur_word.islower(),
-            'prev_is_lower': prev_word.islower(),
-            'next_is_lower': next_word.islower(),
-            'curr_is_upper': cur_word.isupper(),
-            'prev_is_upper': prev_word.isupper(),
-            'next_is_upper': next_word.isupper(),
-            'first_upper': cur_word[0].isupper(),
-            'prev_first_upper': prev_word[0].isupper(),
-            'next_first_upper': next_word[0].isupper(),
             'is_digit': cur_word.isdigit(),
             'prev_is_digit': prev_word.isdigit(),
             'next_is_digit': next_word.isdigit(),
             'has_no_sign': cur_word.isalnum(),
-            'prev_is_sign': all(map(lambda c: not c.isalnum(), prev_word)),
-            'next_is_sign': all(map(lambda c: not c.isalnum(), next_word)),
+            'prev_is_sign': self._is_delimiter(prev_word),
+            'next_is_sign': self._is_delimiter(next_word),
             'prefix-1': cur_word[0],
             'prefix-2': cur_word[:2],
             'prefix-3': cur_word[:3],
@@ -145,32 +136,36 @@ class TerminalsFeatureBuilder:
 class RulesFeatureBuilder:
 
     def create_features_list_for_nodes(self, left_node, right_node):
-        left_rule = left_node.label()
-        right_rule = right_node.label()
 
-        left_left_rule = ''
-        left_right_rule = ''
+        ll = ''
+        lr = ''
+        rl = ''
+        rr = ''
+
         if len(left_node) == 2:
-            left_left_rule = left_node[0].label()
-            left_right_rule = left_node[1].label()
+            ll = left_node[0].label()
+            lr = left_node[1].label()
 
-        right_left_rule = ''
-        right_right_rule = ''
         if len(right_node) == 2:
-            right_left_rule = right_node[0].label()
-            right_right_rule = right_node[1].label()
+            rl = right_node[0].label()
+            rr = right_node[1].label()
 
-        left_height = len(left_node.leaves())
-        right_height = len(right_node.leaves())
+        left_leaves = len(left_node.leaves())
+        right_leaves = len(right_node.leaves())
+
+        return self.create_features_list_for_non_t(
+            left_node.label(), right_node.label(), ll, lr, rl, rr, left_leaves, right_leaves
+        )
+
+    def create_features_list_for_non_t(self, l, r, ll, lr, rl, rr, l_leaves, r_leaves):
 
         return {
-            'left-rule': left_rule,
-            'right-rule': right_rule,
-            'left_left_rule': left_left_rule,
-            'left_right_rule': left_right_rule,
-            'right_left_rule': right_left_rule,
-            'right_right_rule':right_right_rule,
-            'left_height': left_height,
-            'right_height': right_height
+            'left': l,
+            'right': r,
+            'left_left_rule': ll,
+            'left_right_rule': lr,
+            'right_left_rule': rl,
+            'right_right_rule': rr,
+            'left_leaves': l_leaves,
+            'right_leaves': r_leaves
         }
-
