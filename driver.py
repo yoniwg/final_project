@@ -1,17 +1,16 @@
 import os
 from functools import reduce
 from multiprocessing import Process
-from threading import Thread
+from os import getpid
 
 import nltk
-from joblib import dump, load
+from joblib import dump, load, delayed, Parallel
 
 from cky_parser import CKY_Parser
-from util.transliteration import heb_tags
 from vectorizer import TerminalVectorizer, RulesVectorizer
 
-nltk.download('treebank')
-nltk.download('tagsets')
+# nltk.download('treebank')
+# nltk.download('tagsets')
 from sklearn.linear_model import LogisticRegression
 
 from sentences_file_reader import get_treebank
@@ -20,6 +19,7 @@ from sentences_file_reader import get_treebank
 def prepare_training_tree(treebank):
     cnf_tree_bank_list = []
     terminals_tags_rules = set()
+    print("CNFing trees")
     for idx, tree in enumerate(treebank):
         tree.chomsky_normal_form(horzMarkov=2)
         tree.collapse_unary(collapsePOS = True)
@@ -87,7 +87,9 @@ class Driver:
             print(self._rules_trainer.score(X, y))
 
     def _train_rules_grammar(self):
+        print("training grammar")
         self._grammar = nltk.induce_pcfg(nltk.Nonterminal('TOP'), reduce(lambda a,b:a+b, map(lambda t: t.productions(), self._treebank)))
+        print("finished grammar training")
         # dump(self._grammar, self._grammar_file)
 
     def _train_from_files(self):
@@ -104,6 +106,15 @@ class Driver:
             print("start test for rules")
             X, y = self._rules_vectorizer.build_X_y(self._gold_treebank, False)
             print(self._rules_trainer.score(X, y))
+        print("finished loading dump files")
+
+    def _parse_tree(self, parser, tree, idx):
+        print("tree", tree.leaves())
+        print(idx)
+        parsed_tree = parser.parse(tree.leaves())
+        parsed_tree.un_chomsky_normal_form()
+        with open('data/out_gold_{}'.format(getpid()), 'a') as fo:
+            print("{} {}".format(idx, parsed_tree.pformat(margin=999999)), file=fo)
 
     def _test_gold(self):
         cky_parser = CKY_Parser(self._terminal_trainer,
@@ -111,10 +122,10 @@ class Driver:
                                 self._terminal_vectorizer,
                                 self._rules_vectorizer,
                                 self._grammar)
+        # Parallel(n_jobs=4)(delayed(self._parse_tree)(cky_parser, tree, idx)
+        #                    for idx, tree in enumerate(get_treebank(self._gold_treebank_file)))
         for tree in get_treebank(self._gold_treebank_file):
-            parsed_tree = cky_parser.parse(tree.leaves())
-            parsed_tree.un_chomsky_normal_form()
-            with open('data/out_gold', 'a') as fo:
-                print(parsed_tree, file=fo)
+            self._parse_tree(cky_parser, tree, 0)
+
 
 

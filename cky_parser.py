@@ -1,19 +1,12 @@
 import operator
-import sys
 import threading
-import time
 from collections import defaultdict
-from concurrent.futures import thread
 from itertools import product
 from math import log
-from typing import Type
 
-from joblib import Parallel, delayed, dump, load
+from joblib import delayed, Parallel
 from nltk import Nonterminal
 from nltk.tree import Tree
-from sklearn.linear_model import LogisticRegression
-
-from vectorizer import TerminalVectorizer, RulesVectorizer
 
 
 class CKY_Parser:
@@ -48,16 +41,16 @@ class CKY_Parser:
     def add_node_to_tree(self, chart, selected_rule, next_cell, root):
         _, u_path, left, right = next_cell[selected_rule]
 
-        new_node = Tree(selected_rule, [])
+        new_node = Tree(selected_rule.symbol(), [])
         root.append(new_node)
         for non_t in u_path:
-            u_node = Tree(non_t[0], [])
+            u_node = Tree(non_t[0].symbol(), [])
             new_node.add_child(u_node)
             new_node = u_node
 
         left_rule, left_i, left_j = left
         if left_j == 0:
-            new_node.append(Tree(left_rule, []))
+            new_node.append(left_rule)
             return
 
         next_left = chart[left_i][left_j]
@@ -77,7 +70,6 @@ class CKY_Parser:
 
             for l_non_t, (l_prob, _, ll_info, lr_info) in left_candidate.items():
                 for r_non_t, (r_prob, _, rl_info, rr_info) in right_candidate.items():
-                    print("{}x{}={}x{}".format(l_non_t, r_non_t, l_prob, r_prob))
 
                     # rules_res = self._get_rules_probs_log_reg(
                     #     l_non_t, r_non_t, ll_info[0], lr_info[0], rl_info[0], rr_info[0], k, i - k)
@@ -93,7 +85,7 @@ class CKY_Parser:
                         self.fill_node(node, prod.lhs(), prod.prob(), leaves_prob, (l_non_t, k, j),
                                        (r_non_t, i - k, j + k))
 
-        chart[i][j] = dict(sorted(node.items(), key=operator.itemgetter(1, 0), reverse=True)[:5])
+        chart[i][j] = dict(sorted(node.items(), key=operator.itemgetter(1, 0), reverse=True)[:150])
 
     def _get_rules_probs_log_reg(self, l_non_t, r_non_t, ll, lr, rl, rr, l_lvs, r_lvs):
         vec = self._rules_vecorizer.build_one_vector_exp(
@@ -102,11 +94,9 @@ class CKY_Parser:
         return self._rules_trainer.predict_proba(vec)[0]
 
     def _get_rules_probs_grammar(self, l_non_t, r_non_t):
-        l_NonT = Nonterminal(l_non_t)
-        r_NonT = Nonterminal(r_non_t)
         return [
-            prod for prod in self._grammar.productions(None, l_NonT)
-            if prod.rhs() == (l_NonT, r_NonT)
+            prod for prod in self._grammar.productions(None, l_non_t)
+            if prod.rhs() == (l_non_t, r_non_t)
         ]
 
     def parse(self, sentence):
@@ -122,20 +112,21 @@ class CKY_Parser:
             prev2_probs = prev_probs
             prev_probs = terminal_res
             node = chart[1][idx + 1]
-            for p_idx, prob in sorted(enumerate(terminal_res), key=operator.itemgetter(1), reverse=True)[:20]:
+            for p_idx, prob in enumerate(terminal_res):
+                print('{}: {}->{}'.format(idx, p_idx, prob))
             # for p_idx, prob in enumerate(terminal_res):
-                self.fill_node(node, self._terms_tags_list[p_idx], prob,
+                self.fill_node(node, Nonterminal(self._terms_tags_list[p_idx]), prob,
                                0, (sentence[idx], idx + 1, 0), ("", 0, 0))
 
         # main loop
         for i in range(2, lengh + 1):
             print('i={}'.format(i))
-            Parallel(n_jobs=4, prefer='threads')(delayed(self.worker_job)(chart, i, j) for j in range(1, lengh + 2 - i))
+            Parallel(n_jobs=8, prefer='threads')(delayed(self.worker_job)(chart, i, j) for j in range(1, lengh + 2 - i))
         # create tree
         return self.create_tree(chart, lengh, 1)
 
     def fill_node(self, node, source_rule, prob, leaves_prob, l_child, r_child):
-        new_prob = -log(prob) + leaves_prob
+        new_prob = log(prob) + leaves_prob
         if source_rule not in node or new_prob > node[source_rule][0]:
             node[source_rule] = (new_prob, tuple(), l_child, r_child)
 
