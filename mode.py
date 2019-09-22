@@ -34,3 +34,14 @@ if '--ignore_unknown' in argv:
     UNKOWN_MODE = False
 else:
     UNKOWN_MODE = True
+
+TRAIN_MAX_M = '_max'
+TRAIN_MIN_M = '_min'
+TRAIN_NORMAL_M = ''
+
+if '--train-max' in argv:
+    TRAIN_POWER = TRAIN_MAX_M
+elif '--train-min' in argv:
+    TRAIN_POWER = TRAIN_MIN_M
+else:
+    TRAIN_POWER = TRAIN_NORMAL_M

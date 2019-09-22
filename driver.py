@@ -8,7 +8,7 @@ from joblib import dump, load
 
 from cky_parser import CKY_Parser
 from mode import TRAIN_MODE, TRAIN_RULES_M, TRAIN_TERMS_M, TRAIN_ALL_M, PURE_CKY_M, RUN_MODE, TERMS_RULES_M, \
-    TERMS_GRAMMAR_M, UNARY_MODE, UNKOWN_MODE
+    TERMS_GRAMMAR_M, UNARY_MODE, UNKOWN_MODE, TRAIN_POWER
 from unknown_rules_handler import add_unknowns
 from vectorizer import TerminalVectorizer, RulesVectorizer
 if '--nltk_downloads' in argv:
@@ -34,8 +34,7 @@ def prepare_training_tree(treebank):
 class Driver:
     TEST = False
 
-    _training_treebank_file = os.getcwd() + '/data/heb-ctrees.train'
-    _training_treebank_file_min = os.getcwd() + '/data/heb-ctrees_min.train'
+    _training_treebank_file = os.getcwd() + '/data/heb-ctrees{}.train'.format(TRAIN_POWER)
     _gold_treebank_file = os.getcwd() + '/data/heb-ctrees.gold'
 
 
@@ -45,12 +44,12 @@ class Driver:
         assert any(map(lambda tag: tag in self._terms_tags_list, self._gold_terms_tags_list)), "No match of tag lists"
         self._terminal_vectorizer = TerminalVectorizer(self._terms_tags_list)
         self._terminal_trainer = LogisticRegression(solver='lbfgs', multi_class='multinomial',
-                                                    max_iter=100, verbose=2, n_jobs=4)
-        self._terminals_res_file = "data/term_train_res_un"
+                                                    max_iter=500, verbose=2, n_jobs=4)
+        self._terminals_res_file = "data/term_train_res"
 
         self._rules_vectorizer = RulesVectorizer()
         self._rules_trainer = LogisticRegression(solver='lbfgs', multi_class='multinomial',
-                                                 max_iter=100, verbose=2, n_jobs=4)
+                                                 max_iter=500, verbose=2, n_jobs=4)
         self._rules_res_file = "data/rules_train_res"
         self._grammar_file = "data/grammar_res"
 
