@@ -11,7 +11,7 @@ from mode import TRAIN_MODE, TRAIN_RULES_M, TRAIN_TERMS_M, TRAIN_ALL_M, PURE_CKY
     TERMS_GRAMMAR_M, UNARY_MODE, UNKOWN_MODE, TRAIN_POWER
 from unknown_rules_handler import add_unknowns
 from vectorizer import TerminalVectorizer, RulesVectorizer
-if '--nltk_downloads' in argv:
+if '--nltk_download' in argv:
     nltk.download('treebank')
     nltk.download('tagsets')
 from sklearn.linear_model import LogisticRegression
