@@ -13,6 +13,13 @@ Run:
 pip install -r requirement.txt
 ```
 
+In the first running it is probably necessary to run it with the following modifier:
+
+In order to execute the application run:
+```
+python main.py --nltk_download
+```
+
 ## Running the program
 
 In order to execute the application run:
