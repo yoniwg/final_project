@@ -49,3 +49,7 @@ python main.py                  // train 3000
 python main.py --train-min      // train 1000
 python main.py --train-max      // train 5000
 ```
+
+## Data resources 
+
+All the data resources are located in `data` folder
