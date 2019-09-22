@@ -3,7 +3,7 @@ Utility functions for handling the transliteration used in this treebank
 '''
 from joblib import load
 
-heb_tags = load('data/heb-tags')
+# heb_tags = load('data/heb-tags')
 _hebrew = (" \" % " + ' ת ש ר ק צ פ ע ס נ מ ל כ י ט ח ז ו ה ד ג ב א ').split(' ')[::-1]
 _trans  = (' A B G D H W Z X J I K L M N S E P C Q R F T ' + ' O U ').split(' ')
 assert len(_hebrew) == len(_trans)

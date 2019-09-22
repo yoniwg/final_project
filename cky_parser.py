@@ -1,12 +1,14 @@
 import operator
-import threading
-from collections import defaultdict
-from itertools import product
-from math import log
 
-from joblib import delayed, Parallel
+from math import log
+from time import time
+
 from nltk import Nonterminal
 from nltk.tree import Tree
+
+from mode import TERMS_GRAMMAR_M, RUN_MODE, TERMS_RULES_M, PURE_CKY_M, UNARY_MODE, UNKOWN_MODE
+from unariy_rules_handler import init_unaries_dict
+from unknown_rules_handler import UNKNOWN_T
 
 
 class CKY_Parser:
@@ -16,18 +18,20 @@ class CKY_Parser:
         self._rules_trainer = rules_trainer
         self._terminal_vecorizer = terminal_vecorizer
         self._rules_vecorizer = rules_vecorizer
-        self._terms_tags_list = terminal_trainer.classes_
-        # self._rules_tags_list = rules_trainer.classes_
+        if RUN_MODE == TERMS_RULES_M or RUN_MODE == TERMS_GRAMMAR_M:
+            self._terms_tags_list = terminal_trainer.classes_
+        if RUN_MODE == TERMS_RULES_M:
+            self._rules_tags_list = rules_trainer.classes_
         self._grammar = grammar
+        if UNARY_MODE:
+            self._unaries_dict = init_unaries_dict(grammar)
 
     def create_tree(self, chart, chartI, chartJ):
-        print("i={},j={}".format(chartI, chartJ))
         root_node = Tree('TOP', [])
         cell = chart[chartI][chartJ]
         maxProb = float("-inf")
         selected_rule = None
         for rule, info in cell.items():
-            print("{}={}".format(rule, info))
             if info[0] > maxProb:
                 maxProb = info[0]
                 selected_rule = rule
@@ -44,8 +48,8 @@ class CKY_Parser:
         new_node = Tree(selected_rule.symbol(), [])
         root.append(new_node)
         for non_t in u_path:
-            u_node = Tree(non_t[0].symbol(), [])
-            new_node.add_child(u_node)
+            u_node = Tree(non_t.symbol(), [])
+            new_node.append(u_node)
             new_node = u_node
 
         left_rule, left_i, left_j = left
@@ -60,32 +64,6 @@ class CKY_Parser:
 
         self.add_node_to_tree(chart, left_rule, next_left, new_node)
         self.add_node_to_tree(chart, right_rule, next_right, new_node)
-
-    def worker_job(self, chart, i, j):
-        print('tid:{}, j={}'.format(threading.get_ident(),j))
-        node = chart[i][j]
-        for k in range(1, i):
-            left_candidate = chart[k][j]
-            right_candidate = chart[i - k][j + k]
-
-            for l_non_t, (l_prob, _, ll_info, lr_info) in left_candidate.items():
-                for r_non_t, (r_prob, _, rl_info, rr_info) in right_candidate.items():
-
-                    # rules_res = self._get_rules_probs_log_reg(
-                    #     l_non_t, r_non_t, ll_info[0], lr_info[0], rl_info[0], rr_info[0], k, i - k)
-                    # leaves_prob = l_prob + r_prob
-                    # for idx, prob in sorted(enumerate(rules_res), key=operator.itemgetter(1), reverse=True)[:5]:
-                    #     self.fill_node(node, self._rules_tags_list[idx], prob, leaves_prob, (l_non_t, k, j),
-                    #                    (r_non_t, i - k, j + k))
-
-                    prods = self._get_rules_probs_grammar(l_non_t, r_non_t)
-
-                    leaves_prob = l_prob + r_prob
-                    for prod in prods:
-                        self.fill_node(node, prod.lhs(), prod.prob(), leaves_prob, (l_non_t, k, j),
-                                       (r_non_t, i - k, j + k))
-
-        chart[i][j] = dict(sorted(node.items(), key=operator.itemgetter(1, 0), reverse=True)[:150])
 
     def _get_rules_probs_log_reg(self, l_non_t, r_non_t, ll, lr, rl, rr, l_lvs, r_lvs):
         vec = self._rules_vecorizer.build_one_vector_exp(
@@ -104,58 +82,67 @@ class CKY_Parser:
         chart = [[dict() for j in range(lengh + 1)] for i in range(lengh + 1)]
 
         # init
-        prev_probs = [0] * len(self._terms_tags_list)
-        prev2_probs = [0] * len(self._terms_tags_list)
-        for idx in range(lengh):
-            terminal_vec = self._terminal_vecorizer.build_one_vector(sentence, idx, prev_probs, prev2_probs)
-            terminal_res = self._terminal_trainer.predict_proba(terminal_vec)[0]
-            prev2_probs = prev_probs
-            prev_probs = terminal_res
-            node = chart[1][idx + 1]
-            for p_idx, prob in enumerate(terminal_res):
-                print('{}: {}->{}'.format(idx, p_idx, prob))
-            # for p_idx, prob in enumerate(terminal_res):
-                self.fill_node(node, Nonterminal(self._terms_tags_list[p_idx]), prob,
-                               0, (sentence[idx], idx + 1, 0), ("", 0, 0))
+        if RUN_MODE == PURE_CKY_M:
+            for idx in range(lengh):
 
+                terminal_res = [prod for prod in self._grammar.productions(None, sentence[idx])]
+                node = chart[1][idx + 1]
+                if not terminal_res and UNKOWN_MODE:
+                    self.fill_node(node, UNKNOWN_T, log(0.0001), 0, (sentence[idx], idx + 1, 0), ("", 0, 0))
+                else:
+                    for prod in terminal_res:
+                        self.fill_node(node, prod.lhs(), prod.prob(),
+                                       0, (sentence[idx], idx + 1, 0), ("", 0, 0))
+        else:
+            prev_probs = [0] * len(self._terms_tags_list)
+            prev2_probs = [0] * len(self._terms_tags_list)
+            for idx in range(lengh):
+                terminal_vec = self._terminal_vecorizer.build_one_vector(sentence, idx, prev_probs, prev2_probs)
+                terminal_res = self._terminal_trainer.predict_proba(terminal_vec)[0]
+                prev2_probs = prev_probs
+                prev_probs = terminal_res
+                node = chart[1][idx + 1]
+                for p_idx, prob in enumerate(terminal_res):
+                    self.fill_node_unaries(node, Nonterminal(self._terms_tags_list[p_idx]), log(prob),
+                                   0, (sentence[idx], idx + 1, 0), ("", 0, 0))
         # main loop
         for i in range(2, lengh + 1):
-            print('i={}'.format(i))
-            Parallel(n_jobs=8, prefer='threads')(delayed(self.worker_job)(chart, i, j) for j in range(1, lengh + 2 - i))
+            for j in range(1, lengh + 2 - i):
+                node = chart[i][j]
+                for k in range(1, i):
+                    left_candidate = chart[k][j]
+                    right_candidate = chart[i - k][j + k]
+                    count = 0
+                    for l_non_t, (l_prob, _, ll_info, lr_info) in left_candidate.items():
+                        for r_non_t, (r_prob, _, rl_info, rr_info) in right_candidate.items():
+                            count += 1
+                            leaves_prob = l_prob + r_prob
+                            if RUN_MODE == TERMS_RULES_M:
+                                rules_res = self._get_rules_probs_log_reg(
+                                    l_non_t, r_non_t, ll_info[0], lr_info[0], rl_info[0], rr_info[0], k, i - k)
+                                for idx, prob in sorted(enumerate(rules_res), key=operator.itemgetter(1), reverse=True)[:30]:
+                                    self.fill_node(node, Nonterminal(self._rules_tags_list[idx]), log(prob), leaves_prob, (l_non_t, k, j),
+                                                   (r_non_t, i - k, j + k))
+                            else:
+                                prods = self._get_rules_probs_grammar(l_non_t, r_non_t)
+                                for prod in prods:
+                                    self.fill_node_unaries(node, prod.lhs(), prod.logprob(), leaves_prob, (l_non_t, k, j),
+                                                   (r_non_t, i - k, j + k))
+                chart[i][j] = dict(sorted(node.items(), key=operator.itemgetter(1, 0), reverse=True)[:100])
+
         # create tree
         return self.create_tree(chart, lengh, 1)
 
     def fill_node(self, node, source_rule, prob, leaves_prob, l_child, r_child):
-        new_prob = log(prob) + leaves_prob
+        new_prob = prob + leaves_prob
         if source_rule not in node or new_prob > node[source_rule][0]:
             node[source_rule] = (new_prob, tuple(), l_child, r_child)
 
-    def parse2(self, sentence):
-        table = [[defaultdict(float) for _ in sentence] for _ in sentence]
-        nodes_table = [[defaultdict(lambda: Tree('')) for _ in sentence] for _ in sentence]
-        prev_probs = [0] * len(self._terms_tags_list)
-        prev2_probs = [0] * len(self._terms_tags_list)
-        for j in range(0, len(sentence)):
-            terminal_vec = self._terminal_vecorizer.build_one_vector(sentence, j, prev_probs, prev2_probs)
-            terminal_res = self._terminal_trainer.predict_proba(terminal_vec)
-            prev2_probs = prev_probs
-            prev_probs = terminal_res
-            for idx, prob in enumerate(terminal_res):
-                table[j][j][self._terms_tags_list[idx]] = prob
-                nodes_table[j - 1][j][sentence[j]] = Tree(sentence[j])
-            for i in reversed(range(j)):
-                for k in range(i, j):
-                    for pair in set(product(table[i][k], table[k + 1][j])):
-                        rules_probs = self._rules_trainer.predict_proba(self._rules_vecorizer.build_one_vector(
-                            nodes_table[i][k][pair[0]], nodes_table[k + 1][j][pair[1]]))
-                        for idx, prob in enumerate(rules_probs):
-                            l_rule = self._rules_tags_list[idx]
-                            new_prob = prob * table[i][k][pair[0]] * table[k + 1][j][pair[1]]
-                            if table[i][j][l_rule] < new_prob:
-                                table[i][j][l_rule] = new_prob
-                                node = Tree(l_rule.label())
-                                node.append(nodes_table[i][k][pair[0] if isinstance(pair[0], str) else pair[0].label()])
-                                node.append(nodes_table[i][k][pair[1] if isinstance(pair[1], str) else pair[1].label()])
-                                nodes_table[i][j][l_rule.label()] = node
-
-        return nodes_table[0][len(sentence) - 1]['TOP']
+    def fill_node_unaries(self, node, source_rule, prob, leaves_prob, l_child, r_child):
+        if not UNARY_MODE and source_rule in self._unaries_dict:
+            for unary_top, (u_path, u_prob) in self._unaries_dict[source_rule].items():
+                new_prob = leaves_prob + u_prob + prob
+                if unary_top not in node or new_prob > node[unary_top][0]:
+                    node[unary_top] = (new_prob, u_path, l_child, r_child)
+        else:
+            self.fill_node(node, source_rule, prob, leaves_prob, l_child, r_child)

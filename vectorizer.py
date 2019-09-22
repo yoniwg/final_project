@@ -2,14 +2,13 @@ from joblib import dump, load
 from sklearn.feature_extraction import DictVectorizer
 
 from features_builders import TerminalsFeatureBuilder, RulesFeatureBuilder
-from util.transliteration import heb_tags, _trans_symbols
+from util.transliteration import _trans_symbols
 
 _terminals_vec_file = "data/term_train_vec"
 _rules_vec_file = "data/rules_train_vec"
 
 
 class TerminalVectorizer:
-    _heb_tag_set = sorted(heb_tags)
 
     def __init__(self, tags_list) -> None:
         self.tags_list = tags_list
